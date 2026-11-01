@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import favoriteService from '../services/favoriteService'
 import { getUserIdentifier } from '../services/userService'
+import { queryCache } from '../utils/queryCache'
 
 // ---------------------------------------------------------------------------
 // localStorage fallback — used when the backend is unavailable so that
@@ -39,12 +40,18 @@ export function useFavorites() {
   const [isLocal, setIsLocal] = useState(false)
   const userIdentifier = getUserIdentifier()
 
-  const fetchFavorites = useCallback(async () => {
+  const favoritesKey = `favorites:${userIdentifier}`
+
+  const fetchFavorites = useCallback(async (force = false) => {
     try {
       setLoading(true)
       setError(null)
 
-      const response = await favoriteService.getFavorites(userIdentifier)
+      const response = await queryCache.fetch(
+        favoritesKey,
+        () => favoriteService.getFavorites(userIdentifier),
+        { force },
+      )
 
       if (response.success) {
         setFavorites(response.data || [])
@@ -59,13 +66,15 @@ export function useFavorites() {
     } finally {
       setLoading(false)
     }
-  }, [userIdentifier])
+  }, [favoritesKey, userIdentifier])
 
   useEffect(() => {
     fetchFavorites()
   }, [fetchFavorites])
 
-  return { favorites, loading, error, isLocal, refetch: fetchFavorites }
+  const refetch = useCallback(() => fetchFavorites(true), [fetchFavorites])
+
+  return { favorites, loading, error, isLocal, refetch }
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +97,7 @@ export function useToggleFavorite() {
       })
 
       if (response.success) {
+        queryCache.invalidate(`favorites:${userIdentifier}`)
         return response.data
       }
       throw new Error(response.message)

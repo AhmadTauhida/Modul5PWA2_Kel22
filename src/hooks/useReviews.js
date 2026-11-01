@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import reviewService from '../services/reviewService'
+import { queryCache } from '../utils/queryCache'
 
 // ---------------------------------------------------------------------------
 // useReviews — fetch reviews for a specific product.
@@ -10,7 +11,7 @@ export function useReviews(gunId) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const fetchReviews = useCallback(async () => {
+  const fetchReviews = useCallback(async (force = false) => {
     if (!gunId) {
       setLoading(false)
       return
@@ -19,7 +20,11 @@ export function useReviews(gunId) {
       setLoading(true)
       setError(null)
 
-      const response = await reviewService.getReviews(gunId)
+      const response = await queryCache.fetch(
+        `reviews:${gunId}`,
+        () => reviewService.getReviews(gunId),
+        { force },
+      )
 
       if (response.success) {
         setReviews(response.data || [])
@@ -38,7 +43,9 @@ export function useReviews(gunId) {
     fetchReviews()
   }, [fetchReviews])
 
-  return { reviews, loading, error, refetch: fetchReviews }
+  const refetch = useCallback(() => fetchReviews(true), [fetchReviews])
+
+  return { reviews, loading, error, refetch }
 }
 
 // ---------------------------------------------------------------------------
