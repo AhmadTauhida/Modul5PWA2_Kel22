@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { Loader, AlertCircle } from 'lucide-react'
 import Header from './components/Header.jsx'
 import Footer from './components/Footer.jsx'
 import Catalog from './pages/Catalog.jsx'
@@ -9,20 +10,107 @@ import EditGunPage from './pages/EditGunPage.jsx'
 import GunDetail from './components/gun/GunDetail.jsx'
 import About from './pages/About.jsx'
 import Contact from './pages/Contact.jsx'
+import TrashPage from './pages/TrashPage.jsx'
 import PWABadge from './components/PWABadge.jsx'
 import ConfirmModal from './components/modals/ConfirmModal.jsx'
 import SplashScreen from './components/common/SplashScreen.jsx'
 import gunService from './services/gunService.js'
+import GUNS_LOCAL from './data/guns.js'
+import { useTrash } from './hooks/useTrash.js'
+import { isGunTrashed, isGunPurged } from './utils/trashStorage.js'
+import {
+  getSharedGunId,
+  syncGunShareUrl,
+  clearGunShareUrl,
+} from './utils/share.js'
 import './App.css'
 
+const findLocalGun = (id) => {
+  const direct = GUNS_LOCAL.find(
+    (g) => g.id !== undefined && g.id !== null && String(g.id) === String(id),
+  )
+  if (direct) return direct
+
+  const key = String(id)
+  if (!key.startsWith('local-')) return null
+
+  const index = Number(key.slice('local-'.length))
+  if (!Number.isInteger(index) || index < 0 || index >= GUNS_LOCAL.length) {
+    return null
+  }
+  return { ...GUNS_LOCAL[index], id: `local-${index}` }
+}
+
 function App() {
-  const [showSplash, setShowSplash] = useState(true)
+  const [showSplash, setShowSplash] = useState(() => !getSharedGunId())
   const [tab, setTab] = useState('Catalog')
   const [mode, setMode] = useState('list') // 'list' | 'create' | 'edit' | 'detail'
   const [selectedGun, setSelectedGun] = useState(null)
   const [editingGun, setEditingGun] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [deleting, setDeleting] = useState(false)
+  const [sharedGunLoading, setSharedGunLoading] = useState(() => {
+    const id = getSharedGunId()
+    if (!id) return false
+    return !(isGunTrashed(id) || isGunPurged(id))
+  })
+  const [sharedGunError, setSharedGunError] = useState(() => {
+    const id = getSharedGunId()
+    if (!id) return ''
+    return isGunTrashed(id) || isGunPurged(id)
+      ? 'This product has been removed from the catalog.'
+      : ''
+  })
+  const { moveToTrash } = useTrash()
+
+  // Resolve a shared product link (?gun=<id>) on first load.
+  useEffect(() => {
+    const sharedId = getSharedGunId()
+    if (!sharedId) return undefined
+
+    if (isGunTrashed(sharedId) || isGunPurged(sharedId)) {
+      return undefined
+    }
+
+    let cancelled = false
+
+    const loadSharedGun = async () => {
+      setSharedGunLoading(true)
+      setSharedGunError('')
+
+      const localGun = findLocalGun(sharedId)
+      if (localGun) {
+        if (!cancelled) {
+          setTab('Catalog')
+          setSelectedGun(localGun)
+          setMode('detail')
+          setSharedGunLoading(false)
+        }
+        return
+      }
+
+      try {
+        const result = await gunService.getGunById(sharedId)
+        const gun = result?.data ?? result
+        if (!gun || !gun.name) throw new Error('Product not found.')
+        if (!cancelled) {
+          setTab('Catalog')
+          setSelectedGun(gun)
+          setMode('detail')
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSharedGunError(
+            err?.message || 'This shared link is invalid or the product no longer exists.',
+          )
+        }
+      } finally {
+        if (!cancelled) setSharedGunLoading(false)
+      }
+    }
+
+    loadSharedGun()
+    return () => { cancelled = true }
+  }, [])
 
   // Unified navigation handler
   const handleNavigate = (target, payload) => {
@@ -36,6 +124,7 @@ function App() {
     } else if (target === 'Detail') {
       setSelectedGun(payload)
       setMode('detail')
+      syncGunShareUrl(payload)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
       // Tab change
@@ -43,6 +132,8 @@ function App() {
       setMode('list')
       setSelectedGun(null)
       setEditingGun(null)
+      setSharedGunError('')
+      clearGunShareUrl()
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
@@ -51,6 +142,7 @@ function App() {
     setMode('list')
     setSelectedGun(null)
     setEditingGun(null)
+    clearGunShareUrl()
   }
 
   return (
@@ -66,6 +158,31 @@ function App() {
       />
 
       <main className="main">
+        {/* Shared product link resolution */}
+        {mode === 'list' && sharedGunLoading && (
+          <div className="state-box">
+            <Loader size={28} className="spin" />
+            <p>Loading shared product…</p>
+          </div>
+        )}
+
+        {mode === 'list' && !sharedGunLoading && sharedGunError && (
+          <div className="state-box state-box--error">
+            <AlertCircle size={28} />
+            <p>{sharedGunError}</p>
+            <button
+              type="button"
+              className="btn btn--outline"
+              onClick={() => {
+                setSharedGunError('')
+                clearGunShareUrl()
+              }}
+            >
+              Back to Catalog
+            </button>
+          </div>
+        )}
+
         {/* Sub-page views */}
         {mode === 'create' && (
           <CreateGunPage
@@ -99,7 +216,7 @@ function App() {
         )}
 
         {/* Top-level Tabs */}
-        {mode === 'list' && (
+        {mode === 'list' && !sharedGunLoading && !sharedGunError && (
           <>
             {tab === 'Catalog' && (
               <Catalog
@@ -112,6 +229,9 @@ function App() {
                 onNavigateCatalog={() => setTab('Catalog')}
               />
             )}
+            {tab === 'Trash' && (
+              <TrashPage onNavigateCatalog={() => setTab('Catalog')} />
+            )}
             {tab === 'Profile' && (
               <ProfilePage onReplaySplash={() => setShowSplash(true)} />
             )}
@@ -121,27 +241,19 @@ function App() {
         )}
       </main>
 
-      {/* Global Delete Confirmation */}
+      {/* Global soft delete confirmation */}
       <ConfirmModal
         open={Boolean(deleteTarget)}
-        title="Delete Hardware Record"
-        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title="Move Product to Trash"
+        message={`Move "${deleteTarget?.name}" to Trash? You can restore it or delete it permanently from the Trash page.`}
+        confirmLabel="Move to Trash"
         danger
-        loading={deleting}
-        onConfirm={async () => {
+        onConfirm={() => {
           if (!deleteTarget) return
-          try {
-            setDeleting(true)
-            await gunService.deleteGun(deleteTarget.id)
-            setDeleteTarget(null)
-            handleBackToList()
-            setTab('Catalog')
-          } catch (err) {
-            alert(err.message || 'Failed to delete record.')
-          } finally {
-            setDeleting(false)
-          }
+          moveToTrash(deleteTarget)
+          setDeleteTarget(null)
+          handleBackToList()
+          setTab('Catalog')
         }}
         onCancel={() => setDeleteTarget(null)}
       />

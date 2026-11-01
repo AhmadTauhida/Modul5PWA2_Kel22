@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { ArrowLeft, Star, Send, Loader } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ArrowLeft, Star, Send, Loader, Share2 } from 'lucide-react'
 import FavoriteButton from '../common/FavoriteButton'
 import { useReviews, useCreateReview } from '../../hooks/useReviews'
 import { getUserIdentifier } from '../../services/userService'
 import { formatPrice, averageRating } from '../../utils/helpers'
+import { buildGunShareUrl } from '../../utils/share'
 
 /**
  * Full-screen product detail view.
@@ -27,6 +28,55 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
   const [comment, setComment] = useState('')
   const [reviewError, setReviewError] = useState('')
   const [reviewSuccess, setReviewSuccess] = useState('')
+
+  // Share link feedback
+  const [shareStatus, setShareStatus] = useState('')
+  const shareTimerRef = useRef(null)
+
+  useEffect(() => {
+    return () => clearTimeout(shareTimerRef.current)
+  }, [])
+
+  const showShareStatus = (message) => {
+    setShareStatus(message)
+    clearTimeout(shareTimerRef.current)
+    shareTimerRef.current = setTimeout(() => setShareStatus(''), 2500)
+  }
+
+  const handleShare = async () => {
+    if (gun.id === undefined || gun.id === null) {
+      showShareStatus('This product cannot be shared yet.')
+      return
+    }
+
+    const url = buildGunShareUrl(gun)
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: gun.name,
+          text: `Check out ${gun.name} — ${formatPrice(price)} at Bore & Barrel`,
+          url,
+        })
+        showShareStatus('Shared successfully!')
+        return
+      } catch (err) {
+        if (err?.name === 'AbortError') return
+      }
+    }
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(url)
+        showShareStatus('Product link copied to clipboard!')
+        return
+      } catch {
+        /* fall through to manual copy */
+      }
+    }
+
+    window.prompt('Copy this product link:', url)
+  }
 
   const avgRating = gun.average_rating || averageRating(reviews)
   const reviewCount = gun.review_count ?? reviews.length
@@ -84,6 +134,9 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
 
           <div className="detail-actions">
             <FavoriteButton gunId={gun.id || gun.name} />
+            <button type="button" className="btn btn--outline" onClick={handleShare}>
+              <Share2 size={16} /> Share
+            </button>
             {onEdit && (
               <button type="button" className="btn btn--outline" onClick={() => onEdit(gun)}>
                 Edit
@@ -95,6 +148,12 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
               </button>
             )}
           </div>
+
+          {shareStatus && (
+            <p className="share-status" role="status" aria-live="polite">
+              {shareStatus}
+            </p>
+          )}
         </div>
       </div>
 

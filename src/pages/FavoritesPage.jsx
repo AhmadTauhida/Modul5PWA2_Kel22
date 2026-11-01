@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Heart, Loader, AlertCircle, ArrowRight } from 'lucide-react'
 import { useFavorites } from '../hooks/useFavorites'
+import { useTrash } from '../hooks/useTrash'
 import { useGuns } from '../hooks/useGuns'
 import GUNS_LOCAL from '../data/guns'
 import GunCard from '../components/gun/GunCard'
@@ -11,6 +12,7 @@ import GunCard from '../components/gun/GunCard'
  */
 export default function FavoritesPage({ onSelectGun, onNavigateCatalog }) {
   const { favorites, loading: favLoading, error: favError, refetch } = useFavorites()
+  const { trashedIds, purgedIds } = useTrash()
   const { guns: apiGuns } = useGuns({ limit: 100 })
 
   // All known guns catalog for fallback item lookup
@@ -59,8 +61,11 @@ export default function FavoritesPage({ onSelectGun, onNavigateCatalog }) {
       }
     })
 
-    return resolved
-  }, [favorites, allKnownGuns])
+    return resolved.filter((item) => {
+      const id = String(item.id ?? item.name)
+      return !trashedIds.has(id) && !purgedIds.has(id)
+    })
+  }, [favorites, allKnownGuns, trashedIds, purgedIds])
 
   const isLoading = favLoading && favoriteItems.length === 0
 

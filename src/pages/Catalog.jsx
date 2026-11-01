@@ -1,18 +1,28 @@
 import { useState, useMemo } from 'react'
-import { RefreshCw, Plus, Loader, AlertCircle, PackageOpen } from 'lucide-react'
+import {
+  RefreshCw,
+  Plus,
+  Loader,
+  AlertCircle,
+  PackageOpen,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react'
 import { useGuns } from '../hooks/useGuns'
+import { useTrash } from '../hooks/useTrash'
 import GUNS_LOCAL from '../data/guns'
 import GunCard from '../components/gun/GunCard'
 import GunDetail from '../components/gun/GunDetail'
 import AdvancedFilter from '../components/common/AdvancedFilter'
 import ConfirmModal from '../components/modals/ConfirmModal'
-import gunService from '../services/gunService'
 import {
   matchesSearch,
   matchesCategory,
   sortItems,
   extractCategories,
 } from '../utils/helpers'
+
+const PAGE_SIZE = 6
 
 /**
  * Catalog page — the main product listing.
@@ -26,6 +36,7 @@ import {
 export default function Catalog({ onNavigate }) {
   // ---- API data ----
   const { guns: apiGuns, loading, error, refetch } = useGuns({ limit: 50 })
+  const { trashedIds, purgedIds, moveToTrash } = useTrash()
   const [useLocal, setUseLocal] = useState(false)
 
   // Decide data source
@@ -37,42 +48,61 @@ export default function Catalog({ onNavigate }) {
     return apiGuns
   }, [apiGuns, error, useLocal])
 
+  // Hide soft-deleted and permanently deleted products.
+  const activeGuns = useMemo(
+    () =>
+      rawGuns.filter((g) => {
+        const id = String(g.id ?? g.name)
+        return !trashedIds.has(id) && !purgedIds.has(id)
+      }),
+    [rawGuns, trashedIds, purgedIds],
+  )
+
   // ---- filters / sort ----
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('All')
   const [sortKey, setSortKey] = useState('name')
   const [sortOrder, setSortOrder] = useState('asc')
 
-  const categories = useMemo(() => extractCategories(rawGuns), [rawGuns])
+  const categories = useMemo(() => extractCategories(activeGuns), [activeGuns])
 
   const filteredGuns = useMemo(() => {
-    let result = rawGuns.filter(
+    let result = activeGuns.filter(
       (g) => matchesSearch(g, search) && matchesCategory(g, activeCategory),
     )
     return sortItems(result, sortKey, sortOrder)
-  }, [rawGuns, search, activeCategory, sortKey, sortOrder])
+  }, [activeGuns, search, activeCategory, sortKey, sortOrder])
+
+  // ---- pagination ----
+  const [page, setPage] = useState(1)
+  const totalPages = Math.max(1, Math.ceil(filteredGuns.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageStart = (currentPage - 1) * PAGE_SIZE
+  const paginatedGuns = filteredGuns.slice(pageStart, pageStart + PAGE_SIZE)
+
+  const goToPage = (nextPage) => {
+    setPage(Math.min(Math.max(nextPage, 1), totalPages))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   // ---- detail view ----
   const [selectedGun, setSelectedGun] = useState(null)
 
-  // ---- delete ----
+  // ---- delete (soft) ----
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!deleteTarget) return
-    try {
-      setDeleting(true)
-      setDeleteError('')
-      await gunService.deleteGun(deleteTarget.id)
-      setDeleteTarget(null)
-      refetch()
-    } catch (err) {
-      setDeleteError(err.message || 'Failed to delete.')
-    } finally {
-      setDeleting(false)
+    setDeleteError('')
+
+    if (!moveToTrash(deleteTarget)) {
+      setDeleteError('Could not move this product to Trash.')
+      return
     }
+
+    setDeleteTarget(null)
+    setPage(1)
   }
 
   // ---- If viewing a single product detail ----
@@ -120,13 +150,17 @@ export default function Catalog({ onNavigate }) {
         {/* Filters */}
         <AdvancedFilter
           search={search}
-          onSearch={setSearch}
+          onSearch={(value) => { setSearch(value); setPage(1) }}
           categories={categories}
           activeCategory={activeCategory}
-          onCategory={setActiveCategory}
+          onCategory={(value) => { setActiveCategory(value); setPage(1) }}
           sortKey={sortKey}
           sortOrder={sortOrder}
-          onSort={({ key, order }) => { setSortKey(key); setSortOrder(order) }}
+          onSort={({ key, order }) => {
+            setSortKey(key)
+            setSortOrder(order)
+            setPage(1)
+          }}
         />
 
         {/* States */}
@@ -148,7 +182,7 @@ export default function Catalog({ onNavigate }) {
               <button
                 type="button"
                 className="btn btn--outline"
-                onClick={() => setUseLocal(true)}
+                onClick={() => { setUseLocal(true); setPage(1) }}
               >
                 View Local Catalog
               </button>
@@ -166,7 +200,7 @@ export default function Catalog({ onNavigate }) {
         {/* Product grid */}
         {filteredGuns.length > 0 && (
           <ul className="stock">
-            {filteredGuns.map((gun) => (
+            {paginatedGuns.map((gun) => (
               <GunCard
                 key={gun.id || gun.name}
                 gun={gun}
@@ -178,13 +212,55 @@ export default function Catalog({ onNavigate }) {
           </ul>
         )}
 
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <nav className="pagination" aria-label="Catalog pagination">
+            <button
+              type="button"
+              className="pagination__arrow"
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              aria-label="Previous page"
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={`pagination__page${p === currentPage ? ' pagination__page--active' : ''}`}
+                onClick={() => goToPage(p)}
+                aria-current={p === currentPage ? 'page' : undefined}
+              >
+                {p}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              className="pagination__arrow"
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              aria-label="Next page"
+            >
+              <ChevronRight size={16} />
+            </button>
+
+            <span className="pagination__info">
+              Showing {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filteredGuns.length)} of{' '}
+              {filteredGuns.length}
+            </span>
+          </nav>
+        )}
+
         {useLocal && (
           <p className="local-notice">
             Showing local catalog (server unavailable).{' '}
             <button
               type="button"
               className="link-btn"
-              onClick={() => { setUseLocal(false); refetch() }}
+              onClick={() => { setUseLocal(false); setPage(1); refetch() }}
             >
               Retry server
             </button>
@@ -192,14 +268,13 @@ export default function Catalog({ onNavigate }) {
         )}
       </section>
 
-      {/* Delete confirmation */}
+      {/* Soft delete confirmation */}
       <ConfirmModal
         open={!!deleteTarget}
-        title="Delete Product"
-        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title="Move Product to Trash"
+        message={`Move "${deleteTarget?.name}" to Trash? You can restore it or delete it permanently from the Trash page.`}
+        confirmLabel="Move to Trash"
         danger
-        loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => { setDeleteTarget(null); setDeleteError('') }}
       />
