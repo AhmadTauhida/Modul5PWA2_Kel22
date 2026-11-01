@@ -1,7 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { ArrowLeft, Star, Send, Loader, Share2 } from 'lucide-react'
+import { ArrowLeft, Star, Send, Loader, Share2, Pencil, Trash2, X } from 'lucide-react'
 import FavoriteButton from '../common/FavoriteButton'
-import { useReviews, useCreateReview } from '../../hooks/useReviews'
+import ConfirmModal from '../modals/ConfirmModal'
+import {
+  useReviews,
+  useCreateReview,
+  useUpdateReview,
+  useDeleteReview,
+} from '../../hooks/useReviews'
 import { getUserIdentifier } from '../../services/userService'
 import { formatPrice, averageRating } from '../../utils/helpers'
 import { buildGunShareUrl } from '../../utils/share'
@@ -24,10 +30,17 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
   // Reviews
   const { reviews, loading: reviewsLoading, refetch: refetchReviews } = useReviews(gun.id)
   const { createReview, loading: submitting } = useCreateReview()
+  const { updateReview, loading: updating } = useUpdateReview()
+  const { deleteReview, loading: deleting } = useDeleteReview()
+  const currentUserId = getUserIdentifier()
   const [rating, setRating] = useState(5)
   const [comment, setComment] = useState('')
   const [reviewError, setReviewError] = useState('')
   const [reviewSuccess, setReviewSuccess] = useState('')
+  const [editingReview, setEditingReview] = useState(null)
+  const [editRating, setEditRating] = useState(5)
+  const [editComment, setEditComment] = useState('')
+  const [reviewToDelete, setReviewToDelete] = useState(null)
 
   // Share link feedback
   const [shareStatus, setShareStatus] = useState('')
@@ -104,6 +117,57 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
       refetchReviews()
     } else {
       setReviewError('Could not submit review. The server may be unavailable.')
+    }
+  }
+
+  const isOwnReview = (review) =>
+    review.user_id === currentUserId || review.user_identifier === currentUserId
+
+  const startEditingReview = (review) => {
+    setEditingReview(review.id)
+    setEditRating(Number(review.rating) || 5)
+    setEditComment(review.comment || '')
+    setReviewError('')
+  }
+
+  const cancelEditingReview = () => {
+    setEditingReview(null)
+    setEditComment('')
+    setEditRating(5)
+  }
+
+  const handleUpdateReview = async (e) => {
+    e.preventDefault()
+    if (editRating < 1 || editRating > 5) {
+      setReviewError('Rating must be between 1 and 5.')
+      return
+    }
+
+    const result = await updateReview(editingReview, {
+      user_identifier: currentUserId,
+      rating: editRating,
+      comment: editComment.trim(),
+    })
+
+    if (result !== null) {
+      setReviewSuccess('Review updated!')
+      cancelEditingReview()
+      refetchReviews()
+    } else {
+      setReviewError('Could not update review. The server may be unavailable.')
+    }
+  }
+
+  const handleDeleteReview = async () => {
+    if (!reviewToDelete) return
+
+    const deleted = await deleteReview(reviewToDelete.id)
+    if (deleted) {
+      setReviewToDelete(null)
+      setReviewSuccess('Review deleted.')
+      refetchReviews()
+    } else {
+      setReviewError('Could not delete review. The server may be unavailable.')
     }
   }
 
@@ -253,18 +317,49 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
               <li key={rev.id} className="review-item">
                 <div className="review-head">
                   <span className="review-user">{rev.user_identifier || 'Anonymous'}</span>
-                  <span className="review-stars-display">
-                    {Array.from({ length: 5 }, (_, i) => (
-                      <Star
-                        key={i}
-                        size={14}
-                        fill={i < rev.rating ? 'var(--brass)' : 'none'}
-                        stroke={i < rev.rating ? 'var(--brass)' : 'var(--line)'}
-                      />
-                    ))}
-                  </span>
+                  <div className="review-meta">
+                    <span className="review-stars-display">
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <Star
+                          key={i}
+                          size={14}
+                          fill={i < rev.rating ? 'var(--brass)' : 'none'}
+                          stroke={i < rev.rating ? 'var(--brass)' : 'var(--line)'}
+                        />
+                      ))}
+                    </span>
+                    {isOwnReview(rev) && (
+                      <div className="review-actions">
+                        <button type="button" className="icon-btn" onClick={() => startEditingReview(rev)} aria-label="Edit review" title="Edit review">
+                          <Pencil size={14} />
+                        </button>
+                        <button type="button" className="icon-btn icon-btn--danger" onClick={() => setReviewToDelete(rev)} aria-label="Delete review" title="Delete review">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {rev.comment && <p className="review-comment">{rev.comment}</p>}
+                {editingReview === rev.id ? (
+                  <form className="review-edit-form" onSubmit={handleUpdateReview}>
+                    <div className="review-stars">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button key={n} type="button" className="star-btn" onClick={() => setEditRating(n)} aria-label={`${n} star${n > 1 ? 's' : ''}`}>
+                          <Star size={20} fill={n <= editRating ? 'var(--brass)' : 'none'} stroke={n <= editRating ? 'var(--brass)' : 'var(--steel)'} />
+                        </button>
+                      ))}
+                    </div>
+                    <textarea className="review-input" rows="3" value={editComment} onChange={(e) => setEditComment(e.target.value)} maxLength={500} />
+                    <div className="review-edit-actions">
+                      <button type="submit" className="btn btn--primary" disabled={updating}>
+                        {updating ? <><Loader size={16} className="spin" /> Saving…</> : <><Send size={16} /> Save Review</>}
+                      </button>
+                      <button type="button" className="btn btn--outline" onClick={cancelEditingReview} disabled={updating}><X size={16} /> Cancel</button>
+                    </div>
+                  </form>
+                ) : (
+                  rev.comment && <p className="review-comment">{rev.comment}</p>
+                )}
               </li>
             ))}
           </ul>
@@ -272,6 +367,18 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
           <p className="detail-empty">No reviews yet. Be the first!</p>
         )}
       </section>
+
+      <ConfirmModal
+        open={Boolean(reviewToDelete)}
+        title="Delete review?"
+        message="This review will be permanently removed."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        danger
+        loading={deleting}
+        onConfirm={handleDeleteReview}
+        onCancel={() => setReviewToDelete(null)}
+      />
     </div>
   )
 }

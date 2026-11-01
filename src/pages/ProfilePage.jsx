@@ -8,6 +8,10 @@ import {
   FileText,
   Camera,
   Play,
+  Info,
+  MapPin,
+  Clock,
+  Phone,
 } from 'lucide-react'
 import userService from '../services/userService'
 import { useFavorites } from '../hooks/useFavorites'
@@ -209,6 +213,33 @@ export default function ProfilePage({ onReplaySplash }) {
           <Save size={16} /> Save Armorer Profile
         </button>
       </form>
+
+      {/* About and contact information */}
+      <section className="profile-info-grid" aria-label="About and contact">
+        <article className="profile-info-section">
+          <div className="profile-info-heading">
+            <Info size={20} stroke="var(--brass)" />
+            <h2 className="section-title">About Bore &amp; Barrel</h2>
+          </div>
+          <p className="profile-info-lede">A one-room armory.</p>
+          <p>
+            Bore &amp; Barrel sells a short, honest list of firearms. Each piece is
+            priced from the bench with practical details and no filler.
+          </p>
+        </article>
+
+        <article className="profile-info-section">
+          <div className="profile-info-heading">
+            <MapPin size={20} stroke="var(--brass)" />
+            <h2 className="section-title">Contact the Shop</h2>
+          </div>
+          <div className="profile-contact-list">
+            <p><MapPin size={16} /> 123 Range Road</p>
+            <p><Clock size={16} /> Tuesday to Saturday, 10:00 to 18:00</p>
+            <p><Phone size={16} /> (555) 010-0100</p>
+          </div>
+        </article>
+      </section>
     </div>
   )
 }
