@@ -768,6 +768,41 @@
   border-right: 1px solid var(--line);
 }
 
+.detail-gallery {
+  background: #f7f9fa;
+  border-right: 1px solid var(--line);
+}
+
+.detail-thumbnails {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  overflow-x: auto;
+}
+
+.detail-thumbnail {
+  width: 58px;
+  height: 48px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.detail-thumbnail.active {
+  border-color: var(--brass);
+  box-shadow: 0 0 0 1px var(--brass);
+}
+
+.detail-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .detail-info {
   padding: 28px 24px;
   display: flex;
@@ -971,6 +1006,40 @@
   font-size: 0.9rem;
 }
 
+.review-vote-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.review-vote-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  color: var(--steel);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  min-width: 92px;
+  justify-content: center;
+}
+
+.review-vote-btn:hover,
+.review-vote-btn.active {
+  color: var(--brass);
+  border-color: var(--brass);
+}
+
+.review-vote-btn--down.active,
+.review-vote-btn--down:hover {
+  color: #c0392b;
+  border-color: #c0392b;
+}
+
 .form-error {
   color: #c0392b;
   font-size: 0.85rem;
@@ -1127,6 +1196,13 @@
   flex-direction: column;
   align-items: center;
   gap: 16px;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  width: 100%;
 }
 
 .preview-image-wrap {
@@ -1358,6 +1434,13 @@
   border: 1px solid var(--line);
 }
 
+.edit-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+  flex: 1;
+}
+
 .edit-img-controls {
   display: flex;
   flex-direction: column;
@@ -1492,6 +1575,39 @@
   gap: 18px;
 }
 
+.profile-summary {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.profile-summary p {
+  color: var(--steel);
+  line-height: 1.55;
+  margin: 8px 0 0;
+}
+
+.edit-profile-avatar {
+  display: flex;
+  justify-content: center;
+}
+
+.edit-profile-avatar .avatar-wrap {
+  width: 112px;
+  height: 112px;
+}
+
+.profile-edit-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .profile-info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1569,6 +1685,10 @@
 }
 
 @media (max-width: 640px) {
+  .profile-summary {
+    flex-direction: column;
+  }
+
   .profile-info-grid {
     grid-template-columns: 1fr;
   }

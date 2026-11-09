@@ -1,5 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
-import { ArrowLeft, Star, Send, Loader, Share2, Pencil, Trash2, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  Star,
+  Send,
+  Loader,
+  Share2,
+  Pencil,
+  Trash2,
+  X,
+  ThumbsUp,
+  ThumbsDown,
+  MessageCircle,
+} from 'lucide-react'
 import FavoriteButton from '../common/FavoriteButton'
 import ConfirmModal from '../modals/ConfirmModal'
 import {
@@ -12,6 +24,44 @@ import { getUserIdentifier } from '../../services/userService'
 import { formatPrice, averageRating } from '../../utils/helpers'
 import { buildGunShareUrl } from '../../utils/share'
 
+const REVIEW_VOTES_KEY = 'bore_barrel_review_votes'
+const REVIEW_VOTE_COUNTS_KEY = 'bore_barrel_review_vote_counts'
+const SELLER_WHATSAPP_NUMBER = import.meta.env.VITE_SELLER_WHATSAPP_NUMBER || ''
+
+const readReviewVotes = (userId) => {
+  try {
+    const raw = localStorage.getItem(`${REVIEW_VOTES_KEY}:${userId}`)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+const saveReviewVotes = (userId, votes) => {
+  try {
+    localStorage.setItem(`${REVIEW_VOTES_KEY}:${userId}`, JSON.stringify(votes))
+  } catch {
+    // Voting remains available for the current view if storage is unavailable.
+  }
+}
+
+const readReviewVoteCounts = () => {
+  try {
+    const raw = localStorage.getItem(REVIEW_VOTE_COUNTS_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+const saveReviewVoteCounts = (counts) => {
+  try {
+    localStorage.setItem(REVIEW_VOTE_COUNTS_KEY, JSON.stringify(counts))
+  } catch {
+    // Keep counters available in memory when storage is unavailable.
+  }
+}
+
 /**
  * Full-screen product detail view.
  *
@@ -22,7 +72,11 @@ import { buildGunShareUrl } from '../../utils/share'
  * @param {Function} [props.onDelete]— trigger delete flow
  */
 export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
-  const imgSrc = gun.image_url || gun.image || '/guns/pistol.svg'
+  const imageUrls = Array.isArray(gun.image_urls) && gun.image_urls.length > 0
+    ? gun.image_urls
+    : [gun.image_url || gun.image || '/guns/pistol.svg']
+  const [activeImage, setActiveImage] = useState(0)
+  const imgSrc = imageUrls[activeImage] || imageUrls[0]
   const category = gun.type || gun.category || '—'
   const caliber = gun.caliber || gun.difficulty || ''
   const price = gun.price ?? gun.cook_time ?? 0
@@ -41,6 +95,8 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
   const [editRating, setEditRating] = useState(5)
   const [editComment, setEditComment] = useState('')
   const [reviewToDelete, setReviewToDelete] = useState(null)
+  const [reviewVotes, setReviewVotes] = useState(() => readReviewVotes(currentUserId))
+  const [reviewVoteCounts, setReviewVoteCounts] = useState(readReviewVoteCounts)
 
   // Share link feedback
   const [shareStatus, setShareStatus] = useState('')
@@ -89,6 +145,19 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
     }
 
     window.prompt('Copy this product link:', url)
+  }
+
+  const handleContactSeller = () => {
+    const phoneNumber = SELLER_WHATSAPP_NUMBER.replace(/\D/g, '')
+    if (!phoneNumber) {
+      showShareStatus('WhatsApp seller number is not configured yet.')
+      return
+    }
+
+    const message = encodeURIComponent(
+      `Hello, I am interested in ${gun.name}. Is it still available?`,
+    )
+    window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank', 'noopener,noreferrer')
   }
 
   const avgRating = gun.average_rating || averageRating(reviews)
@@ -171,6 +240,36 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
     }
   }
 
+  const handleReviewVote = (reviewId, vote) => {
+    const previousVote = reviewVotes[reviewId]
+    const nextVote = previousVote === vote ? null : vote
+    const nextVotes = { ...reviewVotes }
+    const nextCounts = { ...reviewVoteCounts }
+    const currentCounts = nextCounts[reviewId] || { up: 0, down: 0 }
+    const updatedCounts = { ...currentCounts }
+
+    if (previousVote) {
+      updatedCounts[previousVote] = Math.max(0, updatedCounts[previousVote] - 1)
+    }
+
+    if (nextVote) {
+      updatedCounts[nextVote] += 1
+    }
+
+    nextCounts[reviewId] = updatedCounts
+
+    if (nextVote) {
+      nextVotes[reviewId] = nextVote
+    } else {
+      delete nextVotes[reviewId]
+    }
+
+    setReviewVotes(nextVotes)
+    setReviewVoteCounts(nextCounts)
+    saveReviewVotes(currentUserId, nextVotes)
+    saveReviewVoteCounts(nextCounts)
+  }
+
   return (
     <div className="detail">
       {/* Back button */}
@@ -180,7 +279,24 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
 
       {/* Hero */}
       <div className="detail-hero">
-        <img className="detail-img" src={imgSrc} alt={gun.name} />
+        <div className="detail-gallery">
+          <img className="detail-img" src={imgSrc} alt={`${gun.name} view ${activeImage + 1}`} />
+          {imageUrls.length > 1 && (
+            <div className="detail-thumbnails" aria-label="Product images">
+              {imageUrls.map((url, index) => (
+                <button
+                  key={`${url}-${index}`}
+                  type="button"
+                  className={`detail-thumbnail ${index === activeImage ? 'active' : ''}`}
+                  onClick={() => setActiveImage(index)}
+                  aria-label={`View product image ${index + 1}`}
+                >
+                  <img src={url} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="detail-info">
           <h1 className="display">{gun.name}</h1>
           <p className="type">
@@ -198,6 +314,9 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
 
           <div className="detail-actions">
             <FavoriteButton gunId={gun.id || gun.name} />
+            <button type="button" className="btn btn--outline" onClick={handleContactSeller}>
+              <MessageCircle size={16} /> Contact Seller
+            </button>
             <button type="button" className="btn btn--outline" onClick={handleShare}>
               <Share2 size={16} /> Share
             </button>
@@ -358,7 +477,31 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
                     </div>
                   </form>
                 ) : (
-                  rev.comment && <p className="review-comment">{rev.comment}</p>
+                  <>
+                    {rev.comment && <p className="review-comment">{rev.comment}</p>}
+                    <div className="review-vote-actions" aria-label="Rate this review">
+                      <button
+                        type="button"
+                        className={`review-vote-btn ${reviewVotes[rev.id] === 'up' ? 'active' : ''}`}
+                        onClick={() => handleReviewVote(rev.id, 'up')}
+                        aria-pressed={reviewVotes[rev.id] === 'up'}
+                        title="Helpful review"
+                      >
+                        <ThumbsUp size={15} />
+                        <span>Helpful {reviewVoteCounts[rev.id]?.up || 0}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`review-vote-btn ${reviewVotes[rev.id] === 'down' ? 'active review-vote-btn--down' : ''}`}
+                        onClick={() => handleReviewVote(rev.id, 'down')}
+                        aria-pressed={reviewVotes[rev.id] === 'down'}
+                        title="Not helpful review"
+                      >
+                        <ThumbsDown size={15} />
+                        <span>Not helpful {reviewVoteCounts[rev.id]?.down || 0}</span>
+                      </button>
+                    </div>
+                  </>
                 )}
               </li>
             ))}

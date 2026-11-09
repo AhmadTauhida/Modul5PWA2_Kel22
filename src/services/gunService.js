@@ -38,6 +38,11 @@ export const normalizeProduct = (item) => {
       ? item.steps
       : ['Verify firearm is completely unloaded and point in safe direction.', 'Inspect receiver and mechanism for maintenance.']
 
+  const imageList = Array.isArray(item.image_urls) && item.image_urls.length > 0
+    ? item.image_urls
+    : [item.image_url || item.image || '/guns/pistol.svg']
+  const primaryImage = imageList[0] || '/guns/pistol.svg'
+
   return {
     ...item,
     id: item.id,
@@ -47,8 +52,9 @@ export const normalizeProduct = (item) => {
     caliber: item.caliber || 'Standard',
     price: Number(item.price ?? item.cook_time ?? 0),
     description: item.description || '',
-    image_url: item.image_url || item.image || '/guns/pistol.svg',
-    image: item.image_url || item.image || '/guns/pistol.svg',
+    image_url: primaryImage,
+    image: primaryImage,
+    image_urls: imageList,
     ingredients: specsList,
     steps: stepsList,
   }
@@ -141,6 +147,7 @@ class GunService {
         description: data.description || '',
         specs: specsArray,
         image_url: data.image_url || null,
+        image_urls: Array.isArray(data.image_urls) ? data.image_urls : [data.image_url || '/guns/pistol.svg'],
       }
 
       const res = await apiClient.post('/rest/v1/products', payload, {
@@ -175,6 +182,7 @@ class GunService {
       if (data.description !== undefined) payload.description = data.description
       if (specsArray !== undefined) payload.specs = specsArray
       if (data.image_url !== undefined) payload.image_url = data.image_url
+      if (data.image_urls !== undefined) payload.image_urls = data.image_urls
 
       const res = await apiClient.patch(`/rest/v1/products?id=eq.${id}`, payload, {
         headers: { Prefer: 'return=representation' },

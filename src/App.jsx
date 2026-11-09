@@ -5,6 +5,7 @@ import Footer from './components/Footer.jsx'
 const Catalog = lazy(() => import('./pages/Catalog.jsx'))
 const FavoritesPage = lazy(() => import('./pages/FavoritesPage.jsx'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage.jsx'))
+const EditProfilePage = lazy(() => import('./pages/EditProfilePage.jsx'))
 const CreateGunPage = lazy(() => import('./pages/CreateGunPage.jsx'))
 const EditGunPage = lazy(() => import('./pages/EditGunPage.jsx'))
 const GunDetail = lazy(() => import('./components/gun/GunDetail.jsx'))
@@ -44,7 +45,7 @@ const findLocalGun = (id) => {
 function App() {
   const [showSplash, setShowSplash] = useState(() => !getSharedGunId())
   const [tab, setTab] = useState('Catalog')
-  const [mode, setMode] = useState('list') // 'list' | 'create' | 'edit' | 'detail'
+  const [mode, setMode] = useState('list') // 'list' | 'create' | 'edit' | 'profile-edit' | 'detail'
   const [selectedGun, setSelectedGun] = useState(null)
   const [editingGun, setEditingGun] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -116,6 +117,9 @@ function App() {
   const handleNavigate = (target, payload) => {
     if (target === 'Create') {
       setMode('create')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else if (target === 'EditProfile') {
+      setMode('profile-edit')
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else if (target === 'Edit') {
       setEditingGun(payload)
@@ -214,6 +218,13 @@ function App() {
           />
         )}
 
+        {mode === 'profile-edit' && (
+          <EditProfilePage
+            onBack={() => setMode('list')}
+            onSuccess={() => setMode('list')}
+          />
+        )}
+
         {mode === 'detail' && selectedGun && (
           <GunDetail
             gun={selectedGun}
@@ -241,7 +252,10 @@ function App() {
               <TrashPage onNavigateCatalog={() => setTab('Catalog')} />
             )}
             {tab === 'Profile' && (
-              <ProfilePage onReplaySplash={() => setShowSplash(true)} />
+              <ProfilePage
+                onReplaySplash={() => setShowSplash(true)}
+                onEditProfile={() => handleNavigate('EditProfile')}
+              />
             )}
             {tab === 'About' && <About />}
             {tab === 'Contact' && <Contact />}
